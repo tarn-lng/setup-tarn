@@ -1,0 +1,53 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm]
+        version: [latest, 0.2.0]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: tarn
+        uses: ./
+        with:
+          version: ${{ matrix.version }}
+      - name: Toolchain is on PATH and matches the output
+        run: |
+          tarn version
+          test "$(tarn version)" = "tarn ${{ steps.tarn.outputs.version }}"
+          test -x "${{ steps.tarn.outputs.path }}/tarn-lsp"
+      - name: Native build, run and tests
+        run: |
+          tarn init "$RUNNER_TEMP/project"
+          cd "$RUNNER_TEMP/project"
+          printf 'fn test_sum() {\n    if 1 + 2 != 3 { panic("sum") }\n}\n' > main_test.tarn
+          tarn run
+          tarn test
+      - name: Second setup uses the tool cache
+        uses: ./
+        with:
+          version: ${{ steps.tarn.outputs.version }}
+  rejects-invalid-version:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: bad
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 0.0.0-bad
+      - run: test "${{ steps.bad.outcome }}" = failure

@@ -1,0 +1,42 @@
+name: Setup Tarn
+description: Install a verified Tarn toolchain (compiler, LSP and helpers) on Linux x86_64 or ARM64 runners.
+author: tarn-lng
+branding:
+  icon: package
+  color: blue
+inputs:
+  version:
+    description: Tarn version (X.Y.Z), or "latest" for the newest release.
+    default: latest
+  cache-packages:
+    description: Cache the Tarn package store (TARN_HOME) keyed by tarn.lock files.
+    default: "true"
+  token:
+    description: Token used only to resolve "latest" (avoids API rate limits).
+    default: ${{ github.token }}
+outputs:
+  version:
+    description: The installed Tarn version.
+    value: ${{ steps.install.outputs.version }}
+  path:
+    description: Directory that contains `tarn` and `tarn-lsp`.
+    value: ${{ steps.install.outputs.path }}
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: sh
+      env:
+        TARN_VERSION: ${{ inputs.version }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: sh "$GITHUB_ACTION_PATH/setup.sh"
+    - if: inputs.cache-packages == 'true'
+      shell: sh
+      run: echo "TARN_HOME=$HOME/.tarn" >> "$GITHUB_ENV"
+    - if: inputs.cache-packages == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.tarn
+        key: tarn-packages-${{ runner.os }}-${{ runner.arch }}-${{ steps.install.outputs.version }}-${{ hashFiles('**/tarn.lock') }}
+        restore-keys: |
+          tarn-packages-${{ runner.os }}-${{ runner.arch }}-${{ steps.install.outputs.version }}-
